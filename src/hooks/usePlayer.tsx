@@ -262,6 +262,11 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setIsLoading(false);
       setError(messageFor(e instanceof AppError ? e : toAppError(e, 'playback_failed')));
     });
+    // PATCH (Aurix): lock screen / notification / Bluetooth skip-next and
+    // skip-previous now reach here — see patches/expo-audio+*.patch and
+    // src/playback/PlaybackEngine.ts for how these events are produced.
+    playbackEngine.on('onRemoteNext', () => next());
+    playbackEngine.on('onRemotePrevious', () => previous());
     return () => {
       preloader.cancel();
       void playbackEngine.release();
