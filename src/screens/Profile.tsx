@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Linking,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,7 @@ import {
   Package,
   Shield,
   Bot,
+  ArrowUpRight,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -76,6 +78,23 @@ const JARVIS_PARAMS: { name: string; value: string }[] = [
   { name: 'Genre affinity', value: 'artists & styles you return to' },
   { name: 'Queue depth', value: 'how long your sessions run' },
 ];
+
+/** Blinking block cursor for the builder terminal card. */
+const BlinkCursor: React.FC = () => {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0, duration: 450, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 450, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <Animated.View style={[styles.cursorBlock, { opacity }]} />;
+};
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -243,7 +262,7 @@ export default function ProfileScreen() {
           <ListRow label="Source code" onPress={() => open(REPO_URL)} showDivider={false} />
         </View>
 
-        {/* ---- development (plain sleek expansion, like every other row) ---- */}
+        {/* ---- development: builder opens as a signed terminal card ---- */}
         <Text style={styles.sectionLabel}>DEVELOPMENT</Text>
         <View style={styles.group}>
           <ListRow
@@ -253,15 +272,48 @@ export default function ProfileScreen() {
             showDivider={showBuilder}
           />
           {showBuilder && (
-            <View style={styles.builderBlock}>
-              <View style={styles.builderRow}>
-                <FlowerMark size={28} />
-                <Text style={styles.builderName}>Ayush</Text>
-                <Text style={styles.builderHandle}>@vivac_ayu</Text>
+            <View style={styles.builderWrap}>
+              <View style={styles.termCard}>
+                <View style={styles.termBar}>
+                  <View style={styles.termDots}>
+                    <View style={[styles.termDot, { backgroundColor: COLORS.accent.green }]} />
+                    <View style={[styles.termDot, { backgroundColor: 'rgba(255,255,255,0.25)' }]} />
+                    <View style={[styles.termDot, { backgroundColor: 'rgba(255,255,255,0.12)' }]} />
+                  </View>
+                  <Text style={styles.termTitle} numberOfLines={1}>builder@aurix — profile.tsx</Text>
+                  <FlowerMark size={18} dot />
+                </View>
+
+                <View style={styles.termBody}>
+                  <Text style={styles.termLine}>
+                    <Text style={styles.tokKeyword}>const</Text>
+                    <Text style={styles.tokPlain}> builder</Text>
+                    <Text style={styles.tokMuted}> = </Text>
+                    <Text style={styles.tokPlain}>{'{'}</Text>
+                  </Text>
+                  <Text style={styles.termLine}>
+                    <Text style={styles.tokMuted}>{'  '}name: </Text>
+                    <Text style={styles.tokString}>'Ayush'</Text>
+                    <Text style={styles.tokMuted}>,</Text>
+                  </Text>
+                  <Text style={styles.termLine}>
+                    <Text style={styles.tokMuted}>{'  '}instagram: </Text>
+                    <Text style={styles.tokString}>'@vivac_ayu'</Text>
+                    <Text style={styles.tokMuted}>,</Text>
+                  </Text>
+                  <View style={styles.termLastLine}>
+                    <Text style={styles.termLine}>
+                      <Text style={styles.tokPlain}>{'};'}</Text>
+                    </Text>
+                    <BlinkCursor />
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.followPill} activeOpacity={0.85} onPress={() => open(IG_URL)}>
+                  <Text style={styles.followPillText}>Tap to Follow</Text>
+                  <ArrowUpRight color={COLORS.background} size={16} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.followPill} activeOpacity={0.8} onPress={() => open(IG_URL)}>
-                <Text style={styles.followPillText}>Tap to Follow</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -503,30 +555,67 @@ const styles = StyleSheet.create({
   aboutLabel: { fontFamily: FONTS.regular, fontSize: 15, color: COLORS.text.secondary },
   aboutValue: { fontFamily: FONTS.medium, fontSize: 15, color: COLORS.text.primary },
 
-  /* Builder expansion — one sleek line: mark + name + handle, then the pill. */
-  builderBlock: {
+  /* ---- builder terminal card ---- */
+  builderWrap: {
+    paddingHorizontal: SIZES.md,
+    paddingTop: SIZES.smd,
+    paddingBottom: SIZES.md,
+  },
+  termCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: SIZES.radius.lg,
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
     paddingHorizontal: SIZES.md,
     paddingTop: SIZES.md,
     paddingBottom: SIZES.md,
   },
-  builderRow: {
+  termBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SIZES.smd,
+    gap: SIZES.sm,
+    paddingBottom: SIZES.sm,
     marginBottom: SIZES.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.hairline,
   },
-  builderName: { fontFamily: FONTS.bold, fontSize: 16, color: COLORS.text.primary },
-  builderHandle: { fontFamily: FONTS.regular, fontSize: 13, color: COLORS.text.secondary },
+  termDots: { flexDirection: 'row', gap: 5 },
+  termDot: { width: 8, height: 8, borderRadius: 4 },
+  termTitle: {
+    flex: 1,
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: COLORS.text.muted,
+    letterSpacing: 0.5,
+  },
+  termBody: { marginBottom: SIZES.lg },
+  termLine: {
+    fontFamily: 'monospace',
+    fontSize: 13.5,
+    lineHeight: 22,
+  },
+  termLastLine: { flexDirection: 'row', alignItems: 'center' },
+  cursorBlock: {
+    width: 8,
+    height: 15,
+    backgroundColor: COLORS.accent.green,
+    marginLeft: 6,
+    borderRadius: 1.5,
+  },
+  tokKeyword: { color: COLORS.accent.green },
+  tokPlain: { color: COLORS.text.primary },
+  tokMuted: { color: COLORS.text.muted },
+  tokString: { color: '#FF9DB1' },
   followPill: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: SIZES.sm,
     borderRadius: SIZES.radius.pill,
-    backgroundColor: COLORS.surfaceRaised,
-    borderWidth: 1,
-    borderColor: COLORS.accent.green,
+    backgroundColor: COLORS.accent.green,
     paddingVertical: SIZES.sm + 2,
   },
-  followPillText: { fontFamily: FONTS.semibold, fontSize: 14, color: COLORS.text.primary },
+  followPillText: { fontFamily: FONTS.semibold, fontSize: 14, color: COLORS.background },
 
   infoBlock: {
     paddingHorizontal: SIZES.md,
