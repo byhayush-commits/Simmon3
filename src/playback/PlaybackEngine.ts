@@ -34,6 +34,15 @@ type EngineEvents = {
   onComplete: () => void;
   /** Playback failed for the loaded track. */
   onError: (error: unknown) => void;
+  /**
+   * PATCH (Aurix): the OS-level skip-next / skip-previous control was
+   * pressed (lock screen, notification, Bluetooth/AVRCP, Android Auto).
+   * Only fires on Android, and only once the patched expo-audio native
+   * module (see patches/expo-audio+*.patch) is built into the app —
+   * requires a native rebuild, not just a JS bundle refresh.
+   */
+  onRemoteNext: () => void;
+  onRemotePrevious: () => void;
 };
 
 /**
@@ -46,6 +55,10 @@ type EngineEvents = {
 export class PlaybackEngine {
   private player: AudioPlayer | null = null;
   private subscription: { remove: () => void } | null = null;
+  // PATCH (Aurix): separate subscriptions for the two new remote-control
+  // events so release() can tear them down alongside the status listener.
+  private remoteNextSub: { remove: () => void } | null = null;
+  private remotePrevSub: { remove: () => void } | null = null;
   private listeners: Partial<EngineEvents> = {};
 
   private status: PlaybackStatus = { ...IDLE_STATUS };
@@ -107,6 +120,19 @@ export class PlaybackEngine {
 
     this.subscription = player.addListener('playbackStatusUpdate', (s) => {
       this.handleStatus(s);
+    });
+
+    // PATCH (Aurix): 'remoteNext'/'remotePrevious' are not part of stock
+    // expo-audio's typed event list — they only exist once the native patch
+    // in patches/expo-audio+*.patch is applied and rebuilt. Cast past the
+    // TS types rather than fighting them; the event names must match the
+    // REMOTE_NEXT_EVENT / REMOTE_PREVIOUS_EVENT constants in
+    // AudioControlsService.kt exactly.
+    this.remoteNextSub = (player as any).addListener('remoteNext', () => {
+      this.listeners.onRemoteNext?.();
+    });
+    this.remotePrevSub = (player as any).addListener('remotePrevious', () => {
+      this.listeners.onRemotePrevious?.();
     });
 
     this.player = player;
@@ -389,6 +415,10 @@ export class PlaybackEngine {
     this.configured = false;
     this.subscription?.remove();
     this.subscription = null;
+    this.remoteNextSub?.remove();
+    this.remoteNextSub = null;
+    this.remotePrevSub?.remove();
+    this.remotePrevSub = null;
 
     try {
       this.player?.remove();
