@@ -1,16 +1,18 @@
 import React from 'react';
-import Svg, { Defs, LinearGradient, Stop, Path } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Stop, Path, Rect } from 'react-native-svg';
 
 interface FlowerMarkProps {
   size?: number;
+  /** Small accent full-stop after the glyph — the signature dot. */
+  dot?: boolean;
 }
 
 /**
  * Builder mark: a minimal `</>` code glyph with a horizontal grey→accent
- * gradient (editorial / Swiss feel). Pure SVG, scales cleanly via `size`.
- * Geometry lives inside the 64-unit box with round caps so nothing clips.
+ * gradient. `dot` adds a pink full-stop so it reads like a signed line
+ * of code. Pure SVG, scales cleanly via `size`.
  */
-export const FlowerMark: React.FC<FlowerMarkProps> = ({ size = 52 }) => (
+export const FlowerMark: React.FC<FlowerMarkProps> = ({ size = 52, dot = false }) => (
   <Svg width={size} height={size} viewBox="0 0 64 64" fill="none">
     <Defs>
       <LinearGradient
@@ -28,26 +30,27 @@ export const FlowerMark: React.FC<FlowerMarkProps> = ({ size = 52 }) => (
     </Defs>
     {/* < */}
     <Path
-      d="M20 18 L8 32 L20 46"
+      d="M21 19 L9 32 L21 45"
       stroke="url(#fmGrad)"
-      strokeWidth={6}
+      strokeWidth={5.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     {/* > */}
     <Path
-      d="M44 18 L56 32 L44 46"
+      d="M43 19 L55 32 L43 45"
       stroke="url(#fmGrad)"
-      strokeWidth={6}
+      strokeWidth={5.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     {/* / */}
     <Path
-      d="M37 12 L27 52"
+      d="M36.5 13 L27.5 51"
       stroke="url(#fmGrad)"
-      strokeWidth={6.5}
+      strokeWidth={6}
       strokeLinecap="round"
     />
+    {dot && <Rect x="46" y="46" width="7" height="7" rx="2" fill="#FA2D55" />}
   </Svg>
 );
