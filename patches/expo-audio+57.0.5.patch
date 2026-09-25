@@ -1,0 +1,86 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+index 196a5d5..7100b27 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+@@ -322,11 +322,39 @@ class AudioControlsService : MediaSessionService() {
+ 
+   private fun resolveSessionPlayer(player: AudioPlayer, options: AudioLockScreenOptions?): Player {
+     val isLive = options?.isLiveStream ?: player.isLive
++
++    // PATCH (Aurix): the app's queue lives entirely in JS (usePlayer.tsx), so
++    // the native ExoPlayer instance behind `player.ref` only ever holds ONE
++    // media item and natively has no "next"/"previous" to seek to. We wrap it
++    // in a ForwardingPlayer that (a) always reports a next/previous item so
++    // the OS never greys the buttons out, and (b) turns a press into a JS
++    // event instead of forwarding it into ExoPlayer's own (empty) playlist.
++    val forwarding = object : ForwardingPlayer(player.ref) {
++      override fun hasNextMediaItem(): Boolean = true
++      override fun hasPreviousMediaItem(): Boolean = true
++
++      override fun seekToNext() {
++        player.emit(REMOTE_NEXT_EVENT, emptyMap<String, Any>())
++      }
++
++      override fun seekToNextMediaItem() {
++        player.emit(REMOTE_NEXT_EVENT, emptyMap<String, Any>())
++      }
++
++      override fun seekToPrevious() {
++        player.emit(REMOTE_PREVIOUS_EVENT, emptyMap<String, Any>())
++      }
++
++      override fun seekToPreviousMediaItem() {
++        player.emit(REMOTE_PREVIOUS_EVENT, emptyMap<String, Any>())
++      }
++    }
++
+     if (!isLive) {
+-      return player.ref
++      return forwarding
+     }
+ 
+-    return object : ForwardingPlayer(player.ref) {
++    return object : ForwardingPlayer(forwarding) {
+       override fun getAvailableCommands(): Player.Commands {
+         return super.getAvailableCommands().buildUpon()
+           .remove(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+@@ -560,5 +588,12 @@ class AudioControlsService : MediaSessionService() {
+     const val ACTION_SEEK_BACKWARD = "expo.modules.audio.action.SEEK_BACKWARD"
+ 
+     const val SEEK_INTERVAL_MS = 10000L
++
++    // PATCH (Aurix): emitted on the AudioPlayer SharedObject (same emit()
++    // mechanism as AUDIO_SAMPLE_UPDATE) when the OS-level skip-next /
++    // skip-previous control is pressed. Listen for these in JS with
++    // player.addListener('remoteNext', ...) / player.addListener('remotePrevious', ...).
++    const val REMOTE_NEXT_EVENT = "remoteNext"
++    const val REMOTE_PREVIOUS_EVENT = "remotePrevious"
+   }
+ }
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
+index 839aaef..036ad48 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
+@@ -24,11 +24,17 @@ class AudioMediaSessionCallback : MediaSession.Callback {
+             .add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+             .add(Player.COMMAND_SEEK_FORWARD)
+             .add(Player.COMMAND_SEEK_BACK)
+-            // Remove track navigation commands
+-            .remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+-            .remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+-            .remove(Player.COMMAND_SEEK_TO_PREVIOUS)
+-            .remove(Player.COMMAND_SEEK_TO_NEXT)
++            // PATCH (Aurix): keep track navigation commands enabled so the OS
++            // shows real skip-next/skip-previous buttons on lock screen,
++            // notification, Bluetooth/AVRCP and Android Auto. The player we
++            // hand to this session (see AudioControlsService.resolveSessionPlayer)
++            // is a ForwardingPlayer that intercepts these and forwards them to
++            // JS instead of letting ExoPlayer try to move within its own
++            // (always-empty) native playlist.
++            .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
++            .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
++            .add(Player.COMMAND_SEEK_TO_PREVIOUS)
++            .add(Player.COMMAND_SEEK_TO_NEXT)
+             .build()
+         )
+         .setAvailableSessionCommands(
