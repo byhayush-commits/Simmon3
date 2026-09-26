@@ -33,7 +33,6 @@ import { COLORS, SIZES, FONTS } from '../constants/theme';
 import { Header } from '../components/common/Header';
 import { StatCard } from '../components/common/StatCard';
 import { ListRow } from '../components/common/ListRow';
-import { FlowerMark } from '../components/common/FlowerMark';
 import { Gender } from '../services/LibraryService';
 import { useLibrary } from '../hooks/useLibrary';
 
@@ -79,7 +78,7 @@ const JARVIS_PARAMS: { name: string; value: string }[] = [
   { name: 'Queue depth', value: 'how long your sessions run' },
 ];
 
-/** Blinking block cursor for the builder terminal card. */
+/** Blinking block cursor after the JSON block. */
 const BlinkCursor: React.FC = () => {
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -94,6 +93,58 @@ const BlinkCursor: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return <Animated.View style={[styles.cursorBlock, { opacity }]} />;
+};
+
+/** Blinking `$_` shell prompt for the terminal bar's right corner. */
+const PromptBlink: React.FC = () => {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0, duration: 500, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <Text style={styles.termPrompt}>
+      <Text>$</Text>
+      <Animated.Text style={{ opacity }}>_</Animated.Text>
+    </Text>
+  );
+};
+
+/** Three window dots that pulse one after another, forever. */
+const PulseDots: React.FC = () => {
+  const d0 = useRef(new Animated.Value(0.35)).current;
+  const d1 = useRef(new Animated.Value(0.35)).current;
+  const d2 = useRef(new Animated.Value(0.35)).current;
+  useEffect(() => {
+    // 1320ms cycle per dot; offsets 0 / 440 / 880 keep a clean 1-2-3 wave.
+    const make = (v: Animated.Value, offset: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(offset),
+          Animated.timing(v, { toValue: 1, duration: 220, useNativeDriver: true }),
+          Animated.timing(v, { toValue: 0.35, duration: 220, useNativeDriver: true }),
+          Animated.delay(1320 - 440 - offset),
+        ])
+      );
+    const loops = [make(d0, 0), make(d1, 440), make(d2, 880)];
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <View style={styles.termDots}>
+      <Animated.View style={[styles.termDot, { backgroundColor: COLORS.accent.green, opacity: d0 }]} />
+      <Animated.View style={[styles.termDot, { backgroundColor: 'rgba(255,255,255,0.40)', opacity: d1 }]} />
+      <Animated.View style={[styles.termDot, { backgroundColor: 'rgba(255,255,255,0.22)', opacity: d2 }]} />
+    </View>
+  );
 };
 
 export default function ProfileScreen() {
@@ -262,7 +313,7 @@ export default function ProfileScreen() {
           <ListRow label="Source code" onPress={() => open(REPO_URL)} showDivider={false} />
         </View>
 
-        {/* ---- development: builder opens as a signed terminal card ---- */}
+        {/* ---- development: builder opens as a root-shell terminal card ---- */}
         <Text style={styles.sectionLabel}>DEVELOPMENT</Text>
         <View style={styles.group}>
           <ListRow
@@ -275,20 +326,18 @@ export default function ProfileScreen() {
             <View style={styles.builderWrap}>
               <View style={styles.termCard}>
                 <View style={styles.termBar}>
-                  <View style={styles.termDots}>
-                    <View style={[styles.termDot, { backgroundColor: COLORS.accent.green }]} />
-                    <View style={[styles.termDot, { backgroundColor: 'rgba(255,255,255,0.25)' }]} />
-                    <View style={[styles.termDot, { backgroundColor: 'rgba(255,255,255,0.12)' }]} />
-                  </View>
-                  <Text style={styles.termTitle} numberOfLines={1}>builder@aurix — profile.tsx</Text>
-                  <FlowerMark size={18} dot />
+                  <PulseDots />
+                  <Text style={styles.termTitle} numberOfLines={1}>aurix://root</Text>
+                  <PromptBlink />
                 </View>
 
                 <View style={styles.termBody}>
                   <Text style={styles.termLine}>
-                    <Text style={styles.tokKeyword}>const</Text>
-                    <Text style={styles.tokPlain}> builder</Text>
-                    <Text style={styles.tokMuted}> = </Text>
+                    <Text style={styles.tokPrompt}>$ </Text>
+                    <Text style={styles.tokPlain}>cat root.json</Text>
+                  </Text>
+                  <View style={styles.termGap} />
+                  <Text style={styles.termLine}>
                     <Text style={styles.tokPlain}>{'{'}</Text>
                   </Text>
                   <Text style={styles.termLine}>
@@ -301,9 +350,13 @@ export default function ProfileScreen() {
                     <Text style={styles.tokString}>'@vivac_ayu'</Text>
                     <Text style={styles.tokMuted}>,</Text>
                   </Text>
+                  <Text style={styles.termLine}>
+                    <Text style={styles.tokMuted}>{'  '}single: </Text>
+                    <Text style={styles.tokString}>'false'</Text>
+                  </Text>
                   <View style={styles.termLastLine}>
                     <Text style={styles.termLine}>
-                      <Text style={styles.tokPlain}>{'};'}</Text>
+                      <Text style={styles.tokPlain}>{'}'}</Text>
                     </Text>
                     <BlinkCursor />
                   </View>
@@ -555,7 +608,7 @@ const styles = StyleSheet.create({
   aboutLabel: { fontFamily: FONTS.regular, fontSize: 15, color: COLORS.text.secondary },
   aboutValue: { fontFamily: FONTS.medium, fontSize: 15, color: COLORS.text.primary },
 
-  /* ---- builder terminal card ---- */
+  /* ---- root-shell terminal card ---- */
   builderWrap: {
     paddingHorizontal: SIZES.md,
     paddingTop: SIZES.smd,
@@ -588,7 +641,13 @@ const styles = StyleSheet.create({
     color: COLORS.text.muted,
     letterSpacing: 0.5,
   },
+  termPrompt: {
+    fontFamily: 'monospace',
+    fontSize: 13,
+    color: COLORS.accent.green,
+  },
   termBody: { marginBottom: SIZES.lg },
+  termGap: { height: SIZES.sm },
   termLine: {
     fontFamily: 'monospace',
     fontSize: 13.5,
@@ -602,7 +661,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     borderRadius: 1.5,
   },
-  tokKeyword: { color: COLORS.accent.green },
+  tokPrompt: { color: COLORS.accent.green },
   tokPlain: { color: COLORS.text.primary },
   tokMuted: { color: COLORS.text.muted },
   tokString: { color: '#FF9DB1' },
