@@ -165,3 +165,42 @@ index 839aaef..036ad48 100644
              .build()
          )
          .setAvailableSessionCommands(
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
+index 18203a3..97ca9f1 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
+@@ -3,6 +3,7 @@ package expo.modules.audio.service
+ import android.os.Handler
+ import android.os.Looper
+ import androidx.core.net.toUri
++import androidx.media3.common.C
+ import androidx.media3.common.FlagSet
+ import androidx.media3.common.ForwardingPlayer
+ import androidx.media3.common.MediaMetadata
+@@ -38,6 +39,18 @@ internal class MetadataInjectingPlayer(
+ 
+   override fun getMediaMetadata(): MediaMetadata {
+     val metadata = injectedMetadata
++    // PATCH (Aurix): this builder never set duration, so anything reading
++    // MediaMetadata.durationMs (which is what the OS media-notification
++    // progress bar / Android Auto / Bluetooth actually read — a separate,
++    // statically-set field, NOT the same as Player.getDuration()) always saw
++    // "unknown", even though the real ExoPlayer instance knows the true
++    // duration once the stream loads (confirmed: tracks are m4a, which
++    // carries duration in its own container header). Read the live duration
++    // off the real player and inject it here so it's no longer permanently
++    // null. Left null until the player actually knows it (super.getDuration()
++    // returns C.TIME_UNSET before/while loading) so we never show a fake
++    // duration during buffering.
++    val liveDurationMs = super.getDuration().takeIf { it != C.TIME_UNSET }
+     return super.getMediaMetadata()
+       .buildUpon()
+       .setTitle(metadata?.title)
+@@ -45,6 +58,7 @@ internal class MetadataInjectingPlayer(
+       .setAlbumTitle(metadata?.albumTitle)
+       .setArtworkUri(metadata?.artworkUrl?.toString()?.toUri())
+       .setArtworkData(null, null)
++      .setDurationMs(liveDurationMs)
+       .build()
+   }
+ 
