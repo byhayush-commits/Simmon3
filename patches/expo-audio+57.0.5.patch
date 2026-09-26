@@ -1,8 +1,40 @@
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 196a5d5..d120b17 100644
+index 196a5d5..84fca28 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-@@ -240,17 +240,22 @@ class AudioControlsService : MediaSessionService() {
+@@ -19,6 +19,7 @@ import androidx.media3.common.ForwardingPlayer
+ import androidx.media3.common.Player
+ import androidx.media3.common.util.UnstableApi
+ import androidx.media3.session.CommandButton
++import androidx.media3.session.DefaultMediaNotificationProvider
+ import androidx.media3.session.MediaSession
+ import androidx.media3.session.MediaSessionService
+ import androidx.media3.session.MediaStyleNotificationHelper
+@@ -130,6 +131,23 @@ class AudioControlsService : MediaSessionService() {
+     super.onCreate()
+     audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+     createNotificationChannelIfNeeded()
++    // PATCH (Aurix): hand this session over to Media3's own official
++    // notification provider instead of the hand-rolled NotificationCompat
++    // builder below. This is the standard, most-used integration path for
++    // MediaSessionService — the one that gets the automatic Android 13+
++    // scrub bar "for free," per Android's own docs and the androidx/media
++    // team's own guidance, because it's built and maintained by the same
++    // team that owns the system UI reading it. Our own buildNotification()/
++    // buildPlaceholderNotification() below are left in place, UNCHANGED, and
++    // still used only for the very first cold-start promotion in
++    // ensureForegroundNotification() — the one moment where getting the
++    // timing wrong risks a real crash — so that riskiest path keeps using
++    // exactly the logic that was already working.
++    setMediaNotificationProvider(
++      DefaultMediaNotificationProvider.Builder(this)
++        .setChannelId(CHANNEL_ID)
++        .build()
++    )
+   }
+ 
+   private fun shouldPlayInSilentMode(): Boolean {
+@@ -240,17 +258,22 @@ class AudioControlsService : MediaSessionService() {
      val session = mediaSession ?: return
      val mediaButtons = mutableListOf<CommandButton>()
  
@@ -36,7 +68,7 @@ index 196a5d5..d120b17 100644
  
      // Add play/pause button (always present)
      mediaButtons.add(
-@@ -262,17 +267,16 @@ class AudioControlsService : MediaSessionService() {
+@@ -262,22 +285,30 @@ class AudioControlsService : MediaSessionService() {
          .build()
      )
  
@@ -64,7 +96,55 @@ index 196a5d5..d120b17 100644
  
      session.setCustomLayout(mediaButtons)
      session.setMediaButtonPreferences(mediaButtons)
-@@ -322,11 +326,39 @@ class AudioControlsService : MediaSessionService() {
+   }
+ 
++  // PATCH (Aurix): these two used to build and post/notify our own
++  // NotificationCompat notification by hand. Now that onCreate() registers
++  // DefaultMediaNotificationProvider, the correct way to refresh the
++  // notification is to ask the MediaSessionService base class to do it via
++  // super.onUpdateNotification(...) — it owns the real ActionFactory/Callback
++  // this needs internally, which isn't something app code is meant to
++  // construct by hand. Every existing caller of these two functions
++  // elsewhere in this file is unchanged and still compiles as-is; they just
++  // now trigger the standard/default rendering path instead of our old one.
+   private fun postOrStartForegroundNotification(startInForeground: Boolean) {
+     if (startInForeground) {
+       postOrStartForegroundNotificationNow(startInForeground = true)
+@@ -291,42 +322,49 @@ class AudioControlsService : MediaSessionService() {
+   }
+ 
+   private fun postOrStartForegroundNotificationNow(startInForeground: Boolean) {
+-    val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+-    val notification = buildNotification() ?: return
+-
+-    if (startInForeground) {
+-      try {
+-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+-          startForeground(
+-            notificationId,
+-            notification,
+-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+-          )
+-        } else {
+-          startForeground(notificationId, notification)
+-        }
+-      } catch (e: Exception) {
+-        appContext?.jsLogger?.error(
+-          getPlaybackServiceErrorMessage("Failed to start the expo-audio foreground service for lock screen controls"),
+-          e
+-        )
+-      }
+-    } else {
+-      notificationManager.notify(notificationId, notification)
+-    }
++    val session = mediaSession ?: return
++    super.onUpdateNotification(session, startInForeground)
+   }
+ 
+   override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+-    postOrStartForegroundNotification(startInForegroundRequired)
++    super.onUpdateNotification(session, startInForegroundRequired)
+   }
  
    private fun resolveSessionPlayer(player: AudioPlayer, options: AudioLockScreenOptions?): Player {
      val isLive = options?.isLiveStream ?: player.isLive
@@ -106,7 +186,7 @@ index 196a5d5..d120b17 100644
        override fun getAvailableCommands(): Player.Commands {
          return super.getAvailableCommands().buildUpon()
            .remove(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
-@@ -535,6 +567,18 @@ class AudioControlsService : MediaSessionService() {
+@@ -535,6 +573,18 @@ class AudioControlsService : MediaSessionService() {
        }
  
        override fun onPlaybackStateChanged(playbackState: Int) {
@@ -125,7 +205,7 @@ index 196a5d5..d120b17 100644
          postOrStartForegroundNotification(startInForeground = false)
        }
      }
-@@ -560,5 +604,12 @@ class AudioControlsService : MediaSessionService() {
+@@ -560,5 +610,12 @@ class AudioControlsService : MediaSessionService() {
      const val ACTION_SEEK_BACKWARD = "expo.modules.audio.action.SEEK_BACKWARD"
  
      const val SEEK_INTERVAL_MS = 10000L
