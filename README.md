@@ -20,9 +20,8 @@ No account. No ads. No tracking.
 
 ## Download
 
-[Aurix v1.0.0 APK](https://github.com/SJbuilds04/NOTE/releases/latest/download/NOTE-v1.0.0.apk)
+[Aurix v17.7.0 APK](https://github.com/byhayush-commits/Simmon3/releases/tag/v17.7.0)
 
-> Replace the link above with your own release URL.
 
 ---
 
