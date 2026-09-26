@@ -1,8 +1,70 @@
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 196a5d5..7100b27 100644
+index 196a5d5..d120b17 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-@@ -322,11 +322,39 @@ class AudioControlsService : MediaSessionService() {
+@@ -240,17 +240,22 @@ class AudioControlsService : MediaSessionService() {
+     val session = mediaSession ?: return
+     val mediaButtons = mutableListOf<CommandButton>()
+ 
+-    // Add seek backward button if enabled
+-    if (currentOptions?.showSeekBackward == true) {
+-      mediaButtons.add(
+-        CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
+-          .setDisplayName("Seek Backward")
+-          .setEnabled(true)
+-          .setSessionCommand(SessionCommand(ACTION_SEEK_BACKWARD, Bundle.EMPTY))
+-          .setSlots(CommandButton.SLOT_BACK)
+-          .build()
+-      )
+-    }
++    // PATCH (Aurix): was ICON_SKIP_BACK_10 + ACTION_SEEK_BACKWARD (a custom
++    // session command, gated behind currentOptions?.showSeekBackward).
++    // Replaced with a real "previous track" button, always shown, same as
++    // play/pause — this uses setPlayerCommand (not setSessionCommand) so it
++    // routes through Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM, which the
++    // AudioMediaSessionCallback + ForwardingPlayer patch already turns into
++    // a "remotePrevious" event on the JS side. The ±10s seek buttons are
++    // gone from this row entirely — that's the tradeoff we agreed on.
++    mediaButtons.add(
++      CommandButton.Builder(CommandButton.ICON_PREVIOUS)
++        .setDisplayName("Previous")
++        .setEnabled(true)
++        .setPlayerCommand(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
++        .setSlots(CommandButton.SLOT_BACK)
++        .build()
++    )
+ 
+     // Add play/pause button (always present)
+     mediaButtons.add(
+@@ -262,17 +267,16 @@ class AudioControlsService : MediaSessionService() {
+         .build()
+     )
+ 
+-    // Add seek forward button if enabled
+-    if (currentOptions?.showSeekForward == true) {
+-      mediaButtons.add(
+-        CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_10)
+-          .setDisplayName("Seek Forward")
+-          .setEnabled(true)
+-          .setSessionCommand(SessionCommand(ACTION_SEEK_FORWARD, Bundle.EMPTY))
+-          .setSlots(CommandButton.SLOT_FORWARD)
+-          .build()
+-      )
+-    }
++    // PATCH (Aurix): was ICON_SKIP_FORWARD_10 + ACTION_SEEK_FORWARD. Same
++    // swap as above, mirrored for "next track".
++    mediaButtons.add(
++      CommandButton.Builder(CommandButton.ICON_NEXT)
++        .setDisplayName("Next")
++        .setEnabled(true)
++        .setPlayerCommand(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
++        .setSlots(CommandButton.SLOT_FORWARD)
++        .build()
++    )
+ 
+     session.setCustomLayout(mediaButtons)
+     session.setMediaButtonPreferences(mediaButtons)
+@@ -322,11 +326,39 @@ class AudioControlsService : MediaSessionService() {
  
    private fun resolveSessionPlayer(player: AudioPlayer, options: AudioLockScreenOptions?): Player {
      val isLive = options?.isLiveStream ?: player.isLive
@@ -44,7 +106,26 @@ index 196a5d5..7100b27 100644
        override fun getAvailableCommands(): Player.Commands {
          return super.getAvailableCommands().buildUpon()
            .remove(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
-@@ -560,5 +588,12 @@ class AudioControlsService : MediaSessionService() {
+@@ -535,6 +567,18 @@ class AudioControlsService : MediaSessionService() {
+       }
+ 
+       override fun onPlaybackStateChanged(playbackState: Int) {
++        // PATCH (Aurix) — TEMPORARY DIAGNOSTIC, remove after we get an answer.
++        // Confirms whether ExoPlayer actually knows the track's duration by
++        // the time the notification/session would show a progress bar.
++        // C.TIME_UNSET (-9223372036854775807) means "unknown" — if that's
++        // what shows up here, the missing progress bar is an upstream
++        // stream-resolution problem, not something fixable in this file.
++        if (playbackState == Player.STATE_READY) {
++          android.util.Log.d(
++            "AurixDurationCheck",
++            "duration=${player.ref.duration} (unset=${androidx.media3.common.C.TIME_UNSET})"
++          )
++        }
+         postOrStartForegroundNotification(startInForeground = false)
+       }
+     }
+@@ -560,5 +604,12 @@ class AudioControlsService : MediaSessionService() {
      const val ACTION_SEEK_BACKWARD = "expo.modules.audio.action.SEEK_BACKWARD"
  
      const val SEEK_INTERVAL_MS = 10000L
